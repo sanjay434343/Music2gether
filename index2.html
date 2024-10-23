@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music2gether</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha384-JUdy64CSoME3cLxY4U7qGhdD5AB64yRxK5UNJmc29ysZPUe5W6TNCt+TW8O39eeG" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+    <style>
+        body {
+            background-color: #f9ebd0;
+        }
+
+        #loading {
+            display: none; /* Hidden by default */
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background-color: #FFE5B4;
+            color: #ff8400;
+        }
+
+        .btn {
+            position: absolute;
+            right: 15px;
+        }
+
+        .tit {
+            font-weight: bolder;
+        }
+
+        .b {
+            background-color: #ff8400;
+        }
+
+        span {
+            font-size: 20px;
+        }
+
+        .res {
+            padding: 0;
+            height: 70%;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body class="text-gray-800">
+    <header>
+        <h3 class="tit">Music<span>2</span>gether 🎶</h3>
+    </header>
+
+    <div class="container mx-auto px-4 md:px-0 text-center py-10">
+        <div class="mt-4">
+            <input type="text" id="video-url" class="w-full border border-gray-300 p-2 rounded" placeholder="Enter YouTube video URL...">
+            <button id="load-video" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Load Video</button>
+        </div>
+
+        <div id="player" class="mt-6 w-full max-w-lg mx-auto"></div>
+
+        <div class="mt-4 flex justify-center space-x-4">
+            <button id="play" class="text-white px-4 py-2 rounded b"><i class="fa-solid fa-play"></i></button>
+            <button id="pause" class="text-white px-4 py-2 rounded b"><i class="fa-solid fa-pause"></i></button>
+            <button id="sync" class="text-white px-4 py-2 rounded b"><i class="fa-solid fa-rotate"></i></button>
+        </div>
+
+        <div id="sync-text" class="mt-4 text-lg"></div>
+        <div id="loading" class="mt-4">Loading video, please wait...</div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-database.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        // Firebase config (replace with your Firebase details)
+        var firebaseConfig = {
+            apiKey: "AIzaSyC-nKyC-hpcOj1e0IKMh9E8VqOKvkKr3L4",
+            authDomain: "chatzi-96d60.firebaseapp.com",
+            databaseURL: "https://chatzi-96d60-default-rtdb.firebaseio.com",
+            projectId: "chatzi-96d60",
+            storageBucket: "chatzi-96d60.appspot.com",
+            messagingSenderId: "8860860390",
+            appId: "1:8860860390:android:9583a63e784a116e3c6027"
+        };
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+
+        // YouTube Iframe API setup
+        var player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '390',
+                width: '640',
+                videoId: '', // Placeholder for dynamic video
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+
+        function syncPlayback(action, videoId = '', timestamp = null) {
+            const currentVideoId = player?.getVideoData().video_id || videoId; // Use the current video ID if provided
+            if (action === 'play' && currentVideoId !== videoId) {
+                // Stop the current video if a new video is loaded
+                player.stopVideo();
+            }
+            database.ref('playback').set({
+                action: action,
+                videoId: currentVideoId, // Ensure videoId remains consistent
+                timestamp: timestamp || player?.getCurrentTime(),
+                time: Date.now()
+            });
+        }
+
+        database.ref('playback').on('value', function(snapshot) {
+            const data = snapshot.val();
+            if (data && player) {
+                if (data.action === 'play') {
+                    if (player.getVideoData().video_id !== data.videoId) {
+                        player.loadVideoById(data.videoId);
+                        player.playVideo();
+                    } else {
+                        // If the video is already loaded, just play it
+                        player.seekTo(data.timestamp);
+                        player.playVideo();
+                    }
+                } else if (data.action === 'pause') {
+                    player.pauseVideo();
+                } else if (data.action === 'seek') {
+                    player.seekTo(data.timestamp);
+                }
+            }
+        });
+
+        function onPlayerReady(event) {
+            document.getElementById('load-video').addEventListener('click', function() {
+                const url = document.getElementById('video-url').value;
+                const videoId = extractVideoId(url); // Extract the video ID from the URL
+                if (videoId) {
+                    document.getElementById('loading').style.display = 'block';
+                    // Load the new video and update Firebase
+                    syncPlayback('play', videoId);
+                } else {
+                    alert('Invalid YouTube URL. Please enter a valid URL.');
+                }
+            });
+        
+            document.getElementById('play').addEventListener('click', function() {
+                const videoId = player.getVideoData().video_id;
+                if (videoId) {
+                    document.getElementById('loading').style.display = 'block';
+                    syncPlayback('play', videoId);
+                }
+            });
+        
+            document.getElementById('pause').addEventListener('click', function() {
+                const videoId = player.getVideoData().video_id;
+                syncPlayback('pause', videoId);
+            });
+        
+            document.getElementById('sync').addEventListener('click', function() {
+                syncPlayback('seek', player.getVideoData().video_id, player.getCurrentTime());
+            });
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.PLAYING) {
+                document.getElementById('loading').style.display = 'none';
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                syncPlayback('pause');
+            } else if (event.data === YT.PlayerState.BUFFERING) {
+                document.getElementById('loading').style.display = 'block';
+            }
+        }
+
+        // Function to extract the YouTube video ID from the URL
+        function extractVideoId(url) {
+            const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^&\n]{11})/;
+            const matches = url.match(regex);
+            return matches ? matches[1] : null; // Return video ID if found, otherwise null
+        }
+    </script>
+</body>
+</html>
