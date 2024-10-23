@@ -178,12 +178,14 @@
             }
         }
 
-        // Function to extract the YouTube video ID from the URL
-        function extractVideoId(url) {
-            const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^&\n]{11})/;
-            const matches = url.match(regex);
-            return matches ? matches[1] : null; // Return video ID if found, otherwise null
-        }
+     // Helper function to extract video ID from URL
+function extractVideoId(url) {
+    // Regular expression to match standard and Shorts video URLs
+    const regex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
+}
+
     </script>
 </body>
 </html>
