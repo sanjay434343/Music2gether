@@ -31,7 +31,7 @@
         <button id="open-search-modal" class="text-3xl bg-transparent border-none cursor-pointer">🔍</button>
 
         <!-- Video player container -->
-        <div id="player" class="mt-6 w-full max-w-lg mx-auto"></div>
+        <div id="player" class="mt-6 w-full max-w-lg mx-auto" style="height: 390px;"></div> <!-- Set height here -->
 
         <!-- Playback controls -->
         <div class="mt-4 flex justify-center space-x-4">
@@ -58,7 +58,7 @@
 
     <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-database.js"></script>
-    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="https://www.youtube.com/iframe_api"></script> <!-- Ensure this is included -->
     <script>
         // Firebase config (replace with your Firebase details)
         var firebaseConfig = {
@@ -93,105 +93,71 @@
             database.ref('playback').set({
                 action: action,
                 videoId: videoId,
-                timestamp: timestamp || player?.getCurrentTime(),
+                timestamp: timestamp !== null ? timestamp : (player ? player.getCurrentTime() : 0), // Check player existence
                 time: Date.now()
             });
         }
-
+    
         // Respond to Firebase playback data
         database.ref('playback').on('value', function(snapshot) {
             const data = snapshot.val();
             if (data && player) { // Check if data exists and player is defined
                 if (data.action === 'play') {
                     player.loadVideoById(data.videoId); // Load new video
-                    player.seekTo(data.timestamp);
+                    player.seekTo(data.timestamp); // Seek to the correct timestamp
                     player.playVideo();
                 } else if (data.action === 'pause') {
-                    player.pauseVideo();
+                    if (player && typeof player.pauseVideo === 'function') { // Check if pauseVideo is a function
+                        player.pauseVideo();
+                    }
                 } else if (data.action === 'seek') {
-                    player.seekTo(data.timestamp);
+                    if (player && typeof player.seekTo === 'function') { // Check if seekTo is a function
+                        player.seekTo(data.timestamp);
+                    }
                 }
             }
         });
         
-        // Video playback control
         function onPlayerReady(event) {
-            document.getElementById('play').addEventListener('click', function() {
+            const playButton = document.getElementById('play');
+            const pauseButton = document.getElementById('pause');
+            const syncButton = document.getElementById('sync');
+        
+            playButton.addEventListener('click', function() {
                 const videoId = player.getVideoData().video_id; // Get the current video ID
                 if (videoId) { // Check if there is a video loaded
                     document.getElementById('loading').style.display = 'block'; // Show loading indicator
-                    syncPlayback('play', videoId); // Pass the videoId to syncPlayback
+                    const currentTime = player.getCurrentTime(); // Get current time
+                    syncPlayback('play', videoId, currentTime); // Pass the videoId and currentTime to syncPlayback
                 }
             });
-            document.getElementById('pause').addEventListener('click', function() {
-                syncPlayback('pause');
+        
+            pauseButton.addEventListener('click', function() {
+                if (player && typeof player.pauseVideo === 'function') { // Ensure player is initialized
+                    const currentTime = player.getCurrentTime(); // Get current time
+                    syncPlayback('pause', '', currentTime); // Send current time when pausing
+                }
             });
-            document.getElementById('sync').addEventListener('click', function() {
-                syncPlayback('seek', player.getVideoData().video_id, player.getCurrentTime());
+        
+            syncButton.addEventListener('click', function() {
+                if (player && typeof player.seekTo === 'function') { // Ensure player is initialized
+                    syncPlayback('seek', player.getVideoData().video_id, player.getCurrentTime());
+                }
             });
         }
+        
         
         function onPlayerStateChange(event) {
             // Hide loading indicator when the video starts playing
             if (event.data === YT.PlayerState.PLAYING) {
                 document.getElementById('loading').style.display = 'none'; // Hide loading
             } else if (event.data === YT.PlayerState.PAUSED) {
-                syncPlayback('pause');
+                syncPlayback('pause'); // Ensure pause is synced
             } else if (event.data === YT.PlayerState.BUFFERING) {
                 document.getElementById('loading').style.display = 'block'; // Show loading during buffering
             }
         }
-        
-        // Modal functionality
-        var modal = document.getElementById("search-modal");
-        var btn = document.getElementById("open-search-modal");
-        var span = document.getElementsByClassName("close")[0];
-        
-        btn.onclick = function() {
-            modal.style.display = "flex";
-        }
-        
-        span.onclick = function() {
-            modal.style.display = "none";
-        }
-        
-        window.onclick = function(event) {
-            if (event.target == modal) {
-                modal.style.display = "none";
-            }
-        }
-        
-        // Search YouTube using the API
-        document.getElementById('search-btn').addEventListener('click', function() {
-            var query = document.getElementById('search-bar').value;
-            searchYouTube(query);
-        });
-        
-        function searchYouTube(query) {
-            const YOUTUBE_API_KEY = 'AIzaSyDOaiGm4sJQu6VO18xAZRB9wBgwSgOJ3hk';
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&key=${YOUTUBE_API_KEY}`)
-                .then(response => response.json())
-                .then(data => {
-                    var resultsContainer = document.getElementById('results');
-                    resultsContainer.innerHTML = ''; // Clear previous results
-                    data.items.forEach(item => {
-                        var videoId = item.id.videoId;
-                        var title = item.snippet.title;
-        
-                        // Create result card
-                        var card = document.createElement('div');
-                        card.className = 'result-card border border-gray-300 rounded p-2 mb-2 cursor-pointer';
-                        card.innerHTML = `<h3 class="font-semibold">${title}</h3>`;
-                        card.onclick = function() {
-                            document.getElementById('loading').style.display = 'block'; // Show loading
-                            syncPlayback('play', videoId); // Sync playback globally
-                            player.loadVideoById(videoId); // Load video in the player
-                            modal.style.display = 'none';
-                        };
-                        resultsContainer.appendChild(card);
-                    });
-                });
-        }
     </script>
+    
 </body>
 </html>
