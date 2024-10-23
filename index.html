@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Together</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        /* Custom styles for the modal */
+        #search-modal {
+            display: none; /* Hidden by default */
+        }
+
+        .result-card {
+            transition: background-color 0.3s ease;
+        }
+        .result-card:hover {
+            background-color: #e2e8f0; /* Light gray on hover */
+        }
+        /* Loading spinner */
+        #loading {
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+    <div class="container mx-auto px-4 md:px-0 text-center py-10">
+        <h1 class="text-3xl md:text-4xl font-bold mb-6">Music Together 🎶</h1>
+
+        <!-- Search icon to open modal -->
+        <button id="open-search-modal" class="text-3xl bg-transparent border-none cursor-pointer">🔍</button>
+
+        <!-- Video player container -->
+        <div id="player" class="mt-6 w-full max-w-lg mx-auto"></div>
+
+        <!-- Playback controls -->
+        <div class="mt-4 flex justify-center space-x-4">
+            <button id="play" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Play</button>
+            <button id="pause" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Pause</button>
+            <button id="sync" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Sync</button>
+        </div>
+
+        <!-- Synchronized lyrics or chat -->
+        <div id="sync-text" class="mt-4 text-lg"></div>
+        <div id="loading" class="mt-4">Loading video, please wait...</div>
+    </div>
+
+    <!-- Search Modal -->
+    <div id="search-modal" class="fixed inset-0 flex justify-center items-center z-50 bg-black bg-opacity-50">
+        <div class="bg-white rounded-lg shadow-lg w-11/12 max-w-md p-6">
+            <span class="close text-gray-600 cursor-pointer float-right text-2xl">&times;</span>
+            <input type="text" id="search-bar" class="w-full border border-gray-300 p-2 rounded mt-4" placeholder="Search for a song or video...">
+            <button id="search-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-2">Search</button>
+
+            <div class="results mt-4 overflow-y-auto max-h-60" id="results"></div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-database.js"></script>
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        // Firebase config (replace with your Firebase details)
+        var firebaseConfig = {
+            apiKey: "AIzaSyC-nKyC-hpcOj1e0IKMh9E8VqOKvkKr3L4",
+            authDomain: "chatzi-96d60.firebaseapp.com",
+            databaseURL: "https://chatzi-96d60-default-rtdb.firebaseio.com",
+            projectId: "chatzi-96d60",
+            storageBucket: "chatzi-96d60.appspot.com",
+            messagingSenderId: "8860860390",
+            appId: "1:8860860390:android:9583a63e784a116e3c6027"
+        };
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        var database = firebase.database();
+        
+        // YouTube Iframe API setup
+        var player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                height: '390',
+                width: '640',
+                videoId: '', // Placeholder for dynamic video
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange
+                }
+            });
+        }
+        
+        // Sync playback with Firebase
+        function syncPlayback(action, videoId = '', timestamp = null) {
+            database.ref('playback').set({
+                action: action,
+                videoId: videoId,
+                timestamp: timestamp || player?.getCurrentTime(),
+                time: Date.now()
+            });
+        }
+
+        // Respond to Firebase playback data
+        database.ref('playback').on('value', function(snapshot) {
+            const data = snapshot.val();
+            if (data && player) { // Check if data exists and player is defined
+                if (data.action === 'play') {
+                    player.loadVideoById(data.videoId); // Load new video
+                    player.seekTo(data.timestamp);
+                    player.playVideo();
+                } else if (data.action === 'pause') {
+                    player.pauseVideo();
+                } else if (data.action === 'seek') {
+                    player.seekTo(data.timestamp);
+                }
+            }
+        });
+        
+        // Video playback control
+        function onPlayerReady(event) {
+            document.getElementById('play').addEventListener('click', function() {
+                const videoId = player.getVideoData().video_id; // Get the current video ID
+                if (videoId) { // Check if there is a video loaded
+                    document.getElementById('loading').style.display = 'block'; // Show loading indicator
+                    syncPlayback('play', videoId); // Pass the videoId to syncPlayback
+                }
+            });
+            document.getElementById('pause').addEventListener('click', function() {
+                syncPlayback('pause');
+            });
+            document.getElementById('sync').addEventListener('click', function() {
+                syncPlayback('seek', player.getVideoData().video_id, player.getCurrentTime());
+            });
+        }
+        
+        function onPlayerStateChange(event) {
+            // Hide loading indicator when the video starts playing
+            if (event.data === YT.PlayerState.PLAYING) {
+                document.getElementById('loading').style.display = 'none'; // Hide loading
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                syncPlayback('pause');
+            } else if (event.data === YT.PlayerState.BUFFERING) {
+                document.getElementById('loading').style.display = 'block'; // Show loading during buffering
+            }
+        }
+        
+        // Modal functionality
+        var modal = document.getElementById("search-modal");
+        var btn = document.getElementById("open-search-modal");
+        var span = document.getElementsByClassName("close")[0];
+        
+        btn.onclick = function() {
+            modal.style.display = "flex";
+        }
+        
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+        
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        }
+        
+        // Search YouTube using the API
+        document.getElementById('search-btn').addEventListener('click', function() {
+            var query = document.getElementById('search-bar').value;
+            searchYouTube(query);
+        });
+        
+        function searchYouTube(query) {
+            const YOUTUBE_API_KEY = 'AIzaSyDOaiGm4sJQu6VO18xAZRB9wBgwSgOJ3hk';
+            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&key=${YOUTUBE_API_KEY}`)
+                .then(response => response.json())
+                .then(data => {
+                    var resultsContainer = document.getElementById('results');
+                    resultsContainer.innerHTML = ''; // Clear previous results
+                    data.items.forEach(item => {
+                        var videoId = item.id.videoId;
+                        var title = item.snippet.title;
+        
+                        // Create result card
+                        var card = document.createElement('div');
+                        card.className = 'result-card border border-gray-300 rounded p-2 mb-2 cursor-pointer';
+                        card.innerHTML = `<h3 class="font-semibold">${title}</h3>`;
+                        card.onclick = function() {
+                            document.getElementById('loading').style.display = 'block'; // Show loading
+                            syncPlayback('play', videoId); // Sync playback globally
+                            player.loadVideoById(videoId); // Load video in the player
+                            modal.style.display = 'none';
+                        };
+                        resultsContainer.appendChild(card);
+                    });
+                });
+        }
+    </script>
+</body>
+</html>
