@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase Chat App</title>
+
+  <!-- Firebase Scripts with 'type="module"' -->
+  <script type="module">
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyCTnEw2bGFc8IUWOfhlL6jVBbMHRv_jv0o",
+        authDomain: "buddymusic-14682.firebaseapp.com",
+        databaseURL: "https://buddymusic-14682-default-rtdb.firebaseio.com",
+        projectId: "buddymusic-14682",
+        storageBucket: "buddymusic-14682.firebasestorage.app",
+        messagingSenderId: "915835286798",
+        appId: "1:915835286798:android:33e6a50bf19aa1f906d35f",
+        measurementId: "G-XXXXXXX" // Replace with your actual measurement ID if available
+    };
+
+    // Import Firebase modules
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js';
+    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-auth.js';
+    import { getDatabase, ref, set, push, onChildAdded } from 'https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js';
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getDatabase();
+
+    const googleProvider = new GoogleAuthProvider();
+
+    // Expose signIn function globally for the onclick event
+    window.signIn = function() {
+      signInWithPopup(auth, googleProvider)
+        .then((result) => {
+          const user = result.user;
+          const userName = user.displayName;
+          const userPhoto = user.photoURL;
+
+          // Save user info in Firebase
+          set(ref(db, 'users/' + user.uid), {
+            name: userName,
+            photo: userPhoto
+          });
+
+          // Show the user's name and profile picture in chat
+          document.getElementById('username').textContent = userName;
+          document.getElementById('userPhoto').src = userPhoto;
+
+          // Hide login button and show chat
+          document.getElementById('login').style.display = 'none';
+          document.getElementById('chat').style.display = 'block';
+        })
+        .catch((error) => {
+          console.error(error.message);
+        });
+    };
+
+    // Check if user is logged in
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const userName = user.displayName;
+        const userPhoto = user.photoURL;
+
+        // Show logged-in user's name and photo
+        document.getElementById('username').textContent = userName;
+        document.getElementById('userPhoto').src = userPhoto;
+
+        // Hide login button and show chat
+        document.getElementById('login').style.display = 'none';
+        document.getElementById('chat').style.display = 'block';
+      } else {
+        document.getElementById('login').style.display = 'block';
+        document.getElementById('chat').style.display = 'none';
+      }
+    });
+
+    // Send message
+    document.getElementById('sendMessage').addEventListener('click', () => {
+      const message = document.getElementById('messageInput').value;
+      const user = auth.currentUser;
+
+      if (message && user) {
+        const messageData = {
+          name: user.displayName,
+          photo: user.photoURL,
+          message: message,
+          timestamp: Date.now()
+        };
+
+        // Save message in Firebase
+        push(ref(db, 'messages'), messageData);
+        document.getElementById('messageInput').value = ''; // Clear input field
+      }
+    });
+
+    // Display messages in real-time
+    onChildAdded(ref(db, 'messages'), (snapshot) => {
+      const messageData = snapshot.val();
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('flex', 'items-center', 'mb-2');
+      
+      messageElement.innerHTML = `
+        <img src="${messageData.photo}" class="w-8 h-8 rounded-full" alt="User Photo" />
+        <div class="ml-2">
+          <strong>${messageData.name}</strong><br>
+          <span class="text-sm text-gray-600">${messageData.message}</span>
+        </div>
+      `;
+      
+      document.getElementById('messages').appendChild(messageElement);
+    });
+  </script>
+
+  <!-- Tailwind CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+  <style>
+    /* Make the chat area fill the screen */
+    #chat {
+      height: 90vh;
+      display: flex;
+      flex-direction: column;
+    }
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      max-height: 400px;
+      height: 90%;
+    }
+
+    .in{
+        position: absolute;
+        bottom: 10%;
+        width: 90%;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+  <!-- Login Button -->
+  <button id="login" onclick="signIn()" class="bg-blue-500 text-white p-4 rounded mt-20 mx-auto block shadow-md transition duration-300 hover:bg-blue-600">
+    Sign in with Google
+  </button>
+
+  <!-- Chat Area (hidden until logged in) -->
+  <div id="chat" class="hidden mt-10 p-5 max-w-3xl mx-auto bg-white shadow-lg rounded-lg flex flex-col">
+    <div class="flex items-center space-x-4">
+      <img id="userPhoto" class="w-12 h-12 rounded-full" alt="Profile Picture" />
+      <span id="username" class="ml-4 text-2xl font-semibold text-gray-700"></span>
+    </div>
+
+    <!-- Chat Messages -->
+    <div id="messages" class="my-4 p-4 bg-gray-100 rounded-lg overflow-y-auto flex-1">
+      <!-- Messages will appear here -->
+    </div>
+
+    <!-- Message Input -->
+    <div class="flex mt-2 space-x-2 in">
+      <input id="messageInput" type="text" class="border border-gray-300 p-2 rounded w-full focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Type a message..." />
+      <button id="sendMessage" class="bg-blue-500 text-white p-2 rounded focus:outline-none hover:bg-blue-600">Send</button>
+    </div>
+  </div>
+</body>
+</html>
