@@ -74,18 +74,14 @@
             font-size: 20px;
         }
     </style>
-    
 </head>
 <body class="text-gray-800">
 
     <header>
         <h3 class="tit">Music<span>2</span>gether 🎶</h3>
-
         <button id="open-search-modal" class="btn"><i class="fa-solid fa-magnifying-glass" style="font-weight: 1000;"></i></button>
     </header>
     <div class="container mx-auto px-4 md:px-0 text-center py-10">
-      
-
         <div id="player" class="mt-6 w-full max-w-lg mx-auto"></div>
 
         <div class="mt-4 flex justify-center space-x-4">
@@ -101,10 +97,8 @@
     <div id="search-modal" class="fixed inset-0 flex justify-center items-center z-50 bg-black bg-opacity-50">
         <div class="bg-white rounded-lg shadow-lg p-6  md">
             <span class="close text-gray-600 cursor-pointer float-right text-2xl">&times;</span>
-            <input type="text" id="search-bar" class="w-full border border-gray-300 p-2 rounded mt-4" placeholder="Search for a song or video...">
-            <button id="search-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-2">Search</button>
-
-            <div class="results mt-4  res" id="results"></div>
+            <input type="text" id="search-bar" class="w-full border border-gray-300 p-2 rounded mt-4" placeholder="Enter YouTube video URL...">
+            <button id="search-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 mt-2">Play Video</button>
         </div>
     </div>
 
@@ -128,6 +122,8 @@
         
         // YouTube Iframe API setup
         var player;
+        var playerReady = false; // Flag to track if the player is ready
+    
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
                 height: '390',
@@ -139,22 +135,24 @@
                 }
             });
         }
-        
+    
         // Sync playback with Firebase
         function syncPlayback(action, videoId = '', timestamp = null) {
-            const currentVideoId = player?.getVideoData().video_id || videoId; // Use the current video ID if provided
-            database.ref('playback').set({
-                action: action,
-                videoId: currentVideoId, // Ensure videoId remains consistent
-                timestamp: timestamp || player?.getCurrentTime(),
-                time: Date.now()
-            });
+            if (player && playerReady) {
+                const currentVideoId = player?.getVideoData().video_id || videoId; // Use the current video ID if provided
+                database.ref('playback').set({
+                    action: action,
+                    videoId: currentVideoId, // Ensure videoId remains consistent
+                    timestamp: timestamp || player?.getCurrentTime(),
+                    time: Date.now()
+                });
+            }
         }
     
         // Respond to Firebase playback data
         database.ref('playback').on('value', function(snapshot) {
             const data = snapshot.val();
-            if (data && player) { // Check if data exists and player is defined
+            if (data && player && playerReady) { // Check if player is ready
                 if (data.action === 'play') {
                     // Load new video only if it's not the current video
                     if (player.getVideoData().video_id !== data.videoId) {
@@ -169,9 +167,10 @@
                 }
             }
         });
-        
+    
         // Video playback control
         function onPlayerReady(event) {
+            playerReady = true; // Set the player as ready
             document.getElementById('play').addEventListener('click', function() {
                 const videoId = player.getVideoData().video_id; // Get the current video ID
                 if (videoId) { // Check if there is a video loaded
@@ -189,7 +188,7 @@
                 syncPlayback('seek', player.getVideoData().video_id, player.getCurrentTime());
             });
         }
-        
+    
         function onPlayerStateChange(event) {
             // Hide loading indicator when the video starts playing
             if (event.data === YT.PlayerState.PLAYING) {
@@ -200,87 +199,49 @@
                 document.getElementById('loading').style.display = 'block'; // Show loading during buffering
             }
         }
-        
+    
         // Modal functionality
         var modal = document.getElementById("search-modal");
         var btn = document.getElementById("open-search-modal");
         var span = document.getElementsByClassName("close")[0];
-        
+    
         btn.onclick = function() {
             modal.style.display = "flex";
         }
-        
+    
         span.onclick = function() {
             modal.style.display = "none";
         }
-        
+    
         window.onclick = function(event) {
-            if (event.target == modal) {
+            if (event.target === modal) {
                 modal.style.display = "none";
             }
         }
-        
-        // Search YouTube using the API
+    
+        // Play the video by URL
         document.getElementById('search-btn').addEventListener('click', function() {
-            var query = document.getElementById('search-bar').value;
-            searchYouTube(query);
-        });
-        
-        let nextPageToken = '';
-        let currentQuery = '';
-        
-        function searchYouTube(query) {
-            const YOUTUBE_API_KEY = 'AIzaSyDOaiGm4sJQu6VO18xAZRB9wBgwSgOJ3hk';
-            currentQuery = query; // Store the current query
-        
-            fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${query}&type=video&key=${YOUTUBE_API_KEY}&pageToken=${nextPageToken}`)
-                .then(response => response.json())
-                .then(data => { 
-                    var resultsContainer = document.getElementById('results');
-                    resultsContainer.innerHTML = ''; // Clear previous results
-                    nextPageToken = data.nextPageToken || ''; // Update next page token
-        
-                    data.items.forEach(item => {
-                        var videoId = item.id.videoId;
-                        var title = item.snippet.title;
-                        var thumbnailUrl = item.snippet.thumbnails.default.url; // Get thumbnail URL
-        
-                        // Create result card with thumbnail
-                        var card = document.createElement('div');
-                        card.className = 'result-card border border-gray-300 rounded p-2 mb-2 cursor-pointer flex items-center'; // Added flex for layout
-                        card.innerHTML = `
-                            <img src="${thumbnailUrl}" alt="${title}" class="w-20 h-20 mr-2 rounded"> <!-- Thumbnail Image -->
-                            <h3 class="font-semibold">${title}</h3>
-                        `;
-                        card.onclick = function() {
-                            document.getElementById('loading').style.display = 'block'; // Show loading
-                            syncPlayback('play', videoId); // Sync playback globally
-                            player.loadVideoById(videoId); // Load video in the player
-                            modal.style.display = 'none'; // Close modal
-                        };
-                        resultsContainer.appendChild(card);
-                    });
-        
-                    // Create Load More button if there's a next page token
-                    if (nextPageToken) {
-                        const loadMoreBtn = document.createElement('button');
-                        loadMoreBtn.innerText = 'Load More';
-                        loadMoreBtn.className = 'load-more-btn mt-2 px-4 py-2 bg-blue-500 text-white rounded';
-                        loadMoreBtn.onclick = function() {
-                            loadMoreVideos(); // Load more videos when clicked
-                        };
-                        resultsContainer.appendChild(loadMoreBtn);
-                    }
-                })
-                .catch(error => console.error('Error fetching YouTube data:', error));
-        }
-        
-        function loadMoreVideos() {
-            if (nextPageToken) {
-                searchYouTube(currentQuery); // Fetch the next set of results
+            const videoURL = document.getElementById('search-bar').value;
+            const videoId = extractVideoId(videoURL);
+            if (videoId) {
+                if (playerReady) {
+                    player.loadVideoById(videoId); // Load video by ID
+                    modal.style.display = "none"; // Close modal
+                    syncPlayback('play', videoId); // Sync playback across devices
+                } else {
+                    alert('Player is not ready yet.');
+                }
+            } else {
+                alert('Invalid video URL');
             }
+        });
+    
+        // Function to extract video ID from YouTube URL
+        function extractVideoId(url) {
+            const regExp = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+            const match = url.match(regExp);
+            return match ? match[1] : null;
         }
-        
     </script>
     
 </body>
